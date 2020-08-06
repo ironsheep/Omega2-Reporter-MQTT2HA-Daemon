@@ -11,8 +11,9 @@ A simple Linux python script to query the Omega2 on which it is running for vari
 
 ![Discovery image](./Docs/images/DiscoveryV2.png)
 
-This script can alse be configured to be run in **daemon mode** continously in the background as a systemd service (or optionally as a script run from cron(1m)).
+This script should be configured to be run in **daemon mode** continously in the background as a systemd service (or optionally as a SysV init script).  Instructions are provided below.
 
+This script feeds the Lovelace custom card built originally for reporting on Raspberry Pi's but which can also display the status of your Omega2 devices!
 *(Jump to below [Lovelace Custom Card](#lovelace-custom-card).)*
 
 ## Features
@@ -34,18 +35,18 @@ Each Omega device is reported as:
 | `Manufacturer`   | Onion Corporation |
 | `Model`         | Omega2+  |
 | `Name`      | (fqdn) onion-29be.home |
-| `sofware ver`  | Name, Version (e.g., 0.3.2 b233) |
+| `sofware ver`  | Name, Version (e.g., v0.3.2 b233) |
 
 ### Omega MQTT Topics
 
 Each Omega device is reported as a single topic:
 
-| Name            | Device Class | Units | Description
+| Name            | Device Class |  Description
 |-----------------|-------------|-------------|-------------|
-| `~/monitor`   | 'timestamp' | n/a | Is a timestamp which shows when the Omega last sent information, carries a template payload conveying all monitored values (attach the lovelace custom card to this sensor!)
+| `~/monitor`   | 'timestamp' |  Is a timestamp which shows when the Omega last sent information, carries a template payload conveying all monitored values (attach the lovelace custom card to this sensor!)
 
 
-### RPi Monitor Topic
+### Omega Monitor Topic
 
 The monitored topic reports the following information:
 
@@ -53,16 +54,16 @@ The monitored topic reports the following information:
 |-----------------|-------------|
 | `rpi_model`     | tinyfied hardware version string |
 | `ifaces`        | comma sep list of interfaces on board [w,e,b] |
-| `temperature_c `   | System temperature, in [°C] (0.1°C resolution) |
+| `temperature_c `   | n/a |
 | `up_time`      | duration since last booted, as [days] |
 | `last_update`  | updates last applied, as [date] |
 | `fs_total_gb`       | / total space in [GBytes] |
 | `fs_free_prcnt`       | / free space [%] |
 | `host_name `       | hostname |
 | `fqdn `       | hostname.domain |
-| `ux_release `       | os release name (e.g., buster) |
-| `ux_version `       | os version (e.g., 4.19.66-v7+) |
-| `reporter`  | script name, version running on RPi |
+| `ux_release `       | os release name (e.g., OpenWrt) |
+| `ux_version `       | os version (e.g., v4.14.81) |
+| `reporter`  | script name, version running on Omega2 |
 | `networking`       | lists for each interface: interface name, mac address (and IP if the interface is connected) |
 
 
@@ -74,25 +75,44 @@ MQTT is huge help in connecting different parts of your smart home and setting u
 
 ## Installation
 
-On a modern Linux system just a few steps are needed to get the daemon working.
-The following example shows the installation under Debian/Raspbian below the `/opt` directory:
+On a OpenWrt just a few steps are needed to get the daemon working.
+
+To begin installation we need to find the latest released version of this script. Visit our [releases page](https://github.com/ironsheep/Omega2-Reporter-MQTT2HA-Daemon/releases) to find the latest release. Copy the Link Address of the file you want to use for install (.zip or .tar.gz file)
+
+The following example shows the installation below the `/opt` directory:
 
 ```shell
-sudo apt-get install git python3 python3-pip python3-tzlocal python3-sdnotify python3-colorama
+# go to home directory
+cd
 
-sudo git clone https://github.com/ironsheep/RPi-Reporter-MQTT2HA-Daemon.git /opt/RPi-Reporter-MQTT2HA-Daemon
+# download the file
+wget {the link address you copied}
 
-cd /opt/RPi-Reporter-MQTT2HA-Daemon
+# make our /opt directory if not already present
+mkdir /opt
+
+# move to new directory
+cd /opt
+
+# unpack the release file just downloaded
+tar -xzvf /root/{filename}.tar.gz
+(or) unzip /root/{filename}.zip
+
+# this installed our files in /opt/Omega2-Reporter-MQTT2HA-Daemon, go there
+cd /opt/Omega2-Reporter-MQTT2HA-Daemon
+
+# and install our extra python support
 sudo pip3 install -r requirements.txt
 ```
+
 ## Configuration
 
 To match personal needs, all operational details can be configured by modifying entries within the file [`config.ini`](config.ini.dist).
 The file needs to be created first:
 
 ```shell
-cp /opt/RPi-Reporter-MQTT2HA-Daemon/config.{ini.dist,ini}
-vim /opt/RPi-Reporter-MQTT2HA-Daemon/config.ini
+cp /opt/Omega2-Reporter-MQTT2HA-Daemon/config.{ini.dist,ini}
+vim /opt/Omega2-Reporter-MQTT2HA-Daemon/config.ini
 ```
 
 You will likely want to locate and configure the following (at a minimum) in your config.ini:
@@ -119,7 +139,7 @@ Now that your config.ini is setup let's test!
 A first test run is as easy as:
 
 ```shell
-python3 /opt/RPi-Reporter-MQTT2HA-Daemon/ISP-RPi-mqtt-daemon.py
+python3 /opt/Omega2-Reporter-MQTT2HA-Daemon/ISP-Omega2-mqtt-daemon.py
 ```
 
 **NOTE:** *it is a good idea to execute this script by hand this way each time you modify the config.ini.  By running after each modification the script can tell you through error messages if it had any problems with any values in the config.ini file, or any missing values. etc.*``
@@ -127,101 +147,85 @@ python3 /opt/RPi-Reporter-MQTT2HA-Daemon/ISP-RPi-mqtt-daemon.py
 Using the command line argument `--config`, a directory where to read the config.ini file from can be specified, e.g.
 
 ```shell
-python3 /opt/RPi-Reporter-MQTT2HA-Daemon/ISP-RPi-mqtt-daemon.py --config /opt/RPi-Reporter-MQTT2HA-Daemon
+python3 /opt/Omega2-Reporter-MQTT2HA-Daemon/ISP-Omega2-mqtt-daemon --config /opt/Omega2-Reporter-MQTT2HA-Daemon
 ```
 
-### Choose Run Style
+### Configure new system service
 
-You can choose to run this script as a system service or from cron(1m).
+Now we need to configure our system service. OpenWrt uses the SysV init script convention so let's set this up.
+ 
+#### Run as Sys V init script
 
-- Choose as a system service if you want your HA to know if your RPi is up/down as when run from a service HA knows if you RPi is online or not and when it last reported in.
+In this form our wrapper script located in the /etc/init.d directory and is run according to symbolic links in the `/etc/rc.x` directories.
 
-- If, instead, you want the details of your RPi reported periodically to HA but don't care if it's up or down (or maybe you don't keep it up all the time) then run this script from cron(1m)
-
-Let's look at how to set up each of these forms: 
-
-#### Run as Daemon / Service
-
-In order to have your HA system know if your RPi is online/offline and when it last reported in then you are setting up this script to run as a system service by following these steps:
-
-**NOTE:** Daemon mode must be enabled in the configuration file (default).
-
-By default the **isp-rpi-reporter.service** file indicates that the script should be run as user:group  **daemon:daemon**.  As this script requires access to the gpu you'll want to add access to them for the daemon user as follows:
-
-
-   ```shell   
-   # list current groups
-   groups daemon 
-   $ daemon : daemon
-
-   # add video if not present
-   sudo usermod daemon -a -G video
-   
-   # list current groups
-   groups daemon
-   $ daemon : daemon video
-   #                 ^^^^^ now it is present
-   ```
-
-Now that the 'daemon' user is configured to allow access the hardware you can setup the script to be run as a system service as follows:
+Set up the script to be run as a Sys V init script as follows:
 
    ```shell
-   sudo ln -s /opt/RPi-Reporter-MQTT2HA-Daemon/isp-rpi-reporter.service /etc/systemd/system/isp-rpi-reporter.service
+   ln -s /opt/Omega2-Reporter-MQTT2HA-Daemon/omega2-reporter /etc/init.d/omega2-reporter
 
-   sudo systemctl daemon-reload
+	# configure system to start this script at boot time
+   update-rc.d omega2-reporter defaults
 
-   sudo systemctl start isp-rpi-reporter.service
-   sudo systemctl status isp-rpi-reporter.service
-
-   # tell system that it can start our script at system startup during boot
-   sudo systemctl enable isp-rpi-reporter.service
+   # let's start the script now, too so we don't have to reboot
+   /etc/init.d/omega2-reporter start
+  
+   # check to make sure all is ok with the start up
+   /etc/init.d/omega2-reporter status
    ```
-   
-**NOTE**: Raspian 'Jessie' does not fully support all of these systemctl commands
 
-- **systemctl enable isp-rpi-reporter.service** # does not work. (we're looking at alternative for startup on reboot and verifying if it is starting or not...)
-   
-**NOTE:** *Please remember to run the 'systemctl enable ...' once at first install, if you want your script to start up everytime your RPi reboots!*
-
-   
-#### Run from Cron(1m)
-   
-In order to have the details of your RPi reported periodically to HA but not monitor your RPi for online/offline and when it reports in then we set up this script to run from cron(1m).
-
-With the cron setup you can run this script at intervals during a day, one a day/week and/or every time the RPi is powered on (booted.)
-
-   (-- tba --)
    
 ### Update to latest
 
-Like most active developers, we periodically upgrade our script. You can update to the latest we've published by following these steps:
+Like most active developers, we periodically upgrade our script. 
+
+To begin installation we need to find the latest released version of this script. Visit our [releases page](https://github.com/ironsheep/Omega2-Reporter-MQTT2HA-Daemon/releases) to find the latest release. Copy the Link Address of the file you want to use for install (.zip or .tar.gz file)
+
+The following example shows the installation below the `/opt` directory:
+
+```shell
+# go to home directory
+cd
+
+# download the file
+wget {the link address you copied}
+```
+
+
+Now You can update to the latest by following these steps:
 
    ```shell
-   # go to local repo
-   cd /opt/RPi-Reporter-MQTT2HA-Daemon
-   
    # stop the service
-   sudo systemctl stop isp-rpi-reporter.service
+   sudo /etc/init.d/omega2-reporter stop
    
-   # get the latest version
-   sudo git pull
+   # move to installed options directory
+   cd /opt
 
-	# reload the systemd configuration (in case it changed)
-   sudo systemctl daemon-reload
+   # move our existing directory out of the way
+   mv Omega2-Reporter-MQTT2HA-Daemon Omega2-Reporter-MQTT2HA-Daemon-old
 
-	# restart the service with your new version
-   sudo systemctl start isp-rpi-reporter.service
+   # unpack the latest release file just downloaded
+   tar -xzvf /root/{filename}.tar.gz
+   (or) unzip /root/{filename}.zip
+
+   # this installed our updated files in /opt/Omega2-Reporter-MQTT2HA-Daemon, go there
+   cd /opt/Omega2-Reporter-MQTT2HA-Daemon
+   # (this makes sure our new files arrived in desired location)
+
+   # restart the service with your new version
+   sudo /etc/init.d/omega2-reporter start
+
+   # check status of the running script
+   sudo /etc/init.d/omega2-reporter status
    
-   # if you want, check status of the running script
-   systemctl status isp-rpi-reporter.service
+   # if the status looks good then remove the older isntall directory
+   rm -rf /opt/Omega2-Reporter-MQTT2HA-Daemon-old
 
    ```
 
    
-   
 ## Integration
 
-When this script is running data will be published to the (configured) MQTT broker topic "`raspberrypi/{hostname}/...`" (e.g. `raspberrypi/picam01/...`).
+When this script is running data will be published to the (configured) MQTT broker topic "`dvc-{hostname}/...`" (e.g. `rdvc-picam01/...`).
 
 An example:
 
@@ -256,11 +260,15 @@ An example:
 
 **NOTE:** Where there's an IP address that interface is connected.
 
-This data can be subscribed to and processed by your home assistant installation. How you build your RPi dashboard from here is up to you!  
+This data can be subscribed to and processed by your home assistant installation. How you build your IoT device dashboard from here is up to you!  
 
 ## Lovelace Custom Card
 
-We have a Lovelace Custom Card that makes displaying this RPi Monitor data very easy.  
+We have a Lovelace Custom Card that makes displaying this Omega2 Monitor data very easy.  This script feeds our Raspberry Pi card just fine. You can change the displayed device name on the monitor card by using a one-liner in your view yaml file like this:
+
+```yaml
+name_prefix: 'omega2+ '
+```
 
 See my project: [Lovelace RPi Monitor Card](https://github.com/ironsheep/lovelace-rpi-monitor-card)
 
@@ -273,25 +281,25 @@ Thank you to Thomas Dietrich for providing a wonderful pattern for this project.
 
 ## Disclaimer and Legal
 
-> *Raspberry Pi* is registered trademark of *Raspberry Pi (Trading) Ltd.*
+> *Omega2+* is a product offered by *Onion Corporation*
 >
 > This project is a community project not for commercial use.
-> The authors will not be held responsible in the event of device failure or simply errant reporting of your RPi status.
+> The authors will not be held responsible in the event of device failure or simply errant reporting/control of your garage doors, doggie doors or whatever doors you choose to control with this script.
 >
-> This project is in no way affiliated with, authorized, maintained, sponsored or endorsed by *Raspberry Pi (Trading) Ltd.* or any of its affiliates or subsidiaries.
+> This project is in no way affiliated with, authorized, maintained, sponsored or endorsed by *Onion Corporation* or any of its affiliates or subsidiaries.
 
 ----
 
 
 ### [Copyright](copyright) | [License](LICENSE)
 
-[commits-shield]: https://img.shields.io/github/commit-activity/y/ironsheep/RPi-Reporter-MQTT2HA-Daemon.svg?style=for-the-badge
-[commits]: https://github.com/ironsheep/RPi-Reporter-MQTT2HA-Daemon/commits/master
+[commits-shield]: https://img.shields.io/github/commit-activity/y/ironsheep/Omega2-Reporter-MQTT2HA-Daemon.svg?style=for-the-badge
+[commits]: https://github.com/ironsheep/Omega2-Reporter-MQTT2HA-Daemon/commits/master
 
-[license-shield]: https://img.shields.io/github/license/ironsheep/RPi-Reporter-MQTT2HA-Daemon.svg?style=for-the-badge
+[license-shield]: https://img.shields.io/github/license/ironsheep/Omega2-Reporter-MQTT2HA-Daemon.svg?style=for-the-badge
 
 [maintenance-shield]: https://img.shields.io/badge/maintainer-S%20M%20Moraco%20%40ironsheepbiz-blue.svg?style=for-the-badge
 
-[releases-shield]: https://img.shields.io/github/release/ironsheep/RPi-Reporter-MQTT2HA-Daemon.svg?style=for-the-badge
-[releases]: https://github.com/ironsheep/RPi-Reporter-MQTT2HA-Daemon/releases
+[releases-shield]: https://img.shields.io/github/release/ironsheep/Omega2-Reporter-MQTT2HA-Daemon.svg?style=for-the-badge
+[releases]: https://github.com/ironsheep/Omega2-Reporter-MQTT2HA-Daemon/releases
 

@@ -37,7 +37,7 @@
 #base_topic = home/nodes
 
 # The MQTT name for this Raspberry Pi as a sensor
-#sensor_name = rpi-{hostname}
+#sensor_name = dvc-{hostname}
 
 
 # The MQTT broker authentification credentials (Default: no authentication)
