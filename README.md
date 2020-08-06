@@ -11,7 +11,7 @@ A simple Linux python script to query the Omega2 on which it is running for vari
 
 ![Discovery image](./Docs/images/DiscoveryV2.png)
 
-This script should be configured to be run in **daemon mode** continously in the background as a  SysV init script.  Instructions are provided below.
+This script should be configured to be run in **daemon mode** continously in the background as a System-V init script. (using instructions/scripts provided)
 
 This script feeds the Lovelace custom card built originally for reporting on Raspberry Pi's but which can also display the status of your Omega2 devices!
 *(Jump to below [Lovelace Custom Card](#lovelace-custom-card).)*
@@ -82,6 +82,9 @@ To begin installation we need to find the latest released version of this script
 The following example shows the installation below the `/opt` directory:
 
 ```shell
+# make sure we have python3 installed
+opkg install python3 python3-pip
+
 # go to home directory
 cd
 
@@ -150,9 +153,12 @@ Using the command line argument `--config`, a directory where to read the config
 python3 /opt/Omega2-Reporter-MQTT2HA-Daemon/ISP-Omega2-mqtt-daemon --config /opt/Omega2-Reporter-MQTT2HA-Daemon
 ```
 
-### Configure new system service
+### Configure to run script at startup
 
 Now we need to configure our system service. OpenWrt uses the SysV init script convention so let's set this up.
+
+**NOTE:** Daemon mode must be enabled in the configuration file (default).
+
  
 #### Run as Sys V init script
 
