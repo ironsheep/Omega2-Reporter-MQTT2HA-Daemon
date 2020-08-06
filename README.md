@@ -1,4 +1,4 @@
-# RPi Reporter MQTT2HA Daemon
+# Omega2 Reporter MQTT2HA Daemon
 
 ![Project Maintenance][maintenance-shield]
 
@@ -6,9 +6,8 @@
 
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 
-[![GitHub Release][releases-shield]][releases]
 
-A simple Linux python script to query the Raspberry Pi on which it is running for various configuration and status values which it then reports via via [MQTT](https://projects.eclipse.org/projects/iot.mosquitto) to your [Home Assistant](https://www.home-assistant.io/) installation.  This allows you to install and run this on each of your RPi's so you can track them all via your own Home Assistant Dashboard.
+A simple Linux python script to query the Omega2 on which it is running for various configuration and status values which it then reports via via [MQTT](https://projects.eclipse.org/projects/iot.mosquitto) to your [Home Assistant](https://www.home-assistant.io/) installation.  This allows you to install and run this on each of your Omega2's so you can track them all via your own Home Assistant Dashboard.
 
 ![Discovery image](./Docs/images/DiscoveryV2.png)
 
@@ -18,7 +17,7 @@ This script can alse be configured to be run in **daemon mode** continously in t
 
 ## Features
 
-* Tested on Omega2+ running lede/openWrt
+* Tested on Omega2+ v0.3.2 b244 running OpenWrt v4.14.81
 * Tested with Home Assistant v0.111.0
 * Tested with Mosquitto broker v5.1
 * Data is published via MQTT
