@@ -11,7 +11,7 @@ A simple Linux python script to query the Omega2 on which it is running for vari
 
 ![Discovery image](./Docs/images/DiscoveryV2.png)
 
-This script should be configured to be run in **daemon mode** continously in the background as a systemd service (or optionally as a SysV init script).  Instructions are provided below.
+This script should be configured to be run in **daemon mode** continously in the background as a  SysV init script.  Instructions are provided below.
 
 This script feeds the Lovelace custom card built originally for reporting on Raspberry Pi's but which can also display the status of your Omega2 devices!
 *(Jump to below [Lovelace Custom Card](#lovelace-custom-card).)*
@@ -22,7 +22,7 @@ This script feeds the Lovelace custom card built originally for reporting on Ras
 * Tested with Home Assistant v0.111.0
 * Tested with Mosquitto broker v5.1
 * Data is published via MQTT
-* MQTT discovery messages are sent so RPi's are automatically registered with Home Assistant (if MQTT discovery is enabled in your HA installation)
+* MQTT discovery messages are sent so Omega2's are automatically registered with Home Assistant (if MQTT discovery is enabled in your HA installation)
 * MQTT authentication support
 * No special/root privileges are required by this mechanism
 
