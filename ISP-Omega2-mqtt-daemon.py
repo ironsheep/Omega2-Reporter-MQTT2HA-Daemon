@@ -24,7 +24,7 @@ import paho.mqtt.client as mqtt
 from signal import signal, SIGPIPE, SIG_DFL
 signal(SIGPIPE,SIG_DFL)
 
-script_version = "1.2.2"
+script_version = "1.0.0"
 script_name = 'ISP-Omega2-mqtt-daemon.py'
 script_info = '{} v{}'.format(script_name, script_version)
 project_name = 'Omega2 Reporter MQTT2HA Daemon'
@@ -179,6 +179,7 @@ dvc_system_temp = ''
 dvc_mqtt_script = script_info
 dvc_mac_raw = ''
 dvc_interfaces = []
+dvc_filesystem = []
 
 # -----------------------------------------------------------------------------
 #  monitor variable fetch routines
@@ -205,7 +206,7 @@ def getDeviceModel():
 
 def getLinuxRelease():
     global dvc_linux_release
-    dvc_linux_release = 'openWrt'
+    dvc_linux_release = 'OpenWrt'
     print_line('dvc_linux_release=[{}]'.format(dvc_linux_release), debug=True)
 
 def getLinuxVersion():
@@ -247,11 +248,13 @@ def getUptime():    # RERUN in loop
     print_line('dvc_uptime_raw=[{}]'.format(dvc_uptime_raw), debug=True)
     basicParts = dvc_uptime_raw.split()
     timeStamp = basicParts[0]
+
+    # uptime<RET>
+    #  03:29:23 up 12 min,  load average: 0.02, 0.07, 0.07
     lineParts = dvc_uptime_raw.split(',')
-    if('user' in lineParts[1]):
-        dvc_uptime_raw = lineParts[0]
-    else:
-        dvc_uptime_raw = '{}, {}'.format(lineParts[0], lineParts[1])
+    #print_line('lineParts=[{}]'.format(lineParts), debug=True)
+    dvc_uptime_raw = lineParts[0]
+    print_line('dvc_uptime_raw=[{}]'.format(dvc_uptime_raw), debug=True)
     dvc_uptime = dvc_uptime_raw.replace(timeStamp, '').lstrip().replace('up ', '')
     print_line('dvc_uptime=[{}]'.format(dvc_uptime), debug=True)
 
@@ -318,41 +321,76 @@ def getNetworkIFs():    # RERUN in loop
     dvc_interfaces = tmpInterfaces
     print_line('dvc_interfaces=[{}]'.format(dvc_interfaces), debug=True)
 
-def getFileSystemSpace():
+def getFileSystemDrives():
     global dvc_filesystem_space_raw
     global dvc_filesystem_space
     global dvc_filesystem_percent
-    out = subprocess.Popen("/bin/df -m | /bin/grep root", 
+    global dvc_filesystem
+    out = subprocess.Popen("/bin/df -m | /usr/bin/tail -n +2 | /bin/egrep -v 'tmpfs|boot'", 
             shell=True,
             stdout=subprocess.PIPE, 
             stderr=subprocess.STDOUT)
     stdout,_ = out.communicate()
-    dvc_filesystem_space_raw = stdout.decode('utf-8').rstrip()
-    print_line('dvc_filesystem_space_raw=[{}]'.format(dvc_filesystem_space_raw), debug=True)
-    lineParts = dvc_filesystem_space_raw.split()
-    print_line('lineParts=[{}]'.format(lineParts), debug=True)
-    filesystem_1GBlocks = int(lineParts[1],10) / 1024
-    if filesystem_1GBlocks > 32:
-        dvc_filesystem_space = '64GB'
-    elif filesystem_1GBlocks > 16:
-        dvc_filesystem_space = '32GB'
-    elif filesystem_1GBlocks > 8:
-        dvc_filesystem_space = '16GB'
-    elif filesystem_1GBlocks > 4:
-        dvc_filesystem_space = '8GB'
-    elif filesystem_1GBlocks > 2:
-        dvc_filesystem_space = '4GB'
-    elif filesystem_1GBlocks > 1:
-        dvc_filesystem_space = '2GB'
-    else:
-        dvc_filesystem_space = '1GB'
-    print_line('dvc_filesystem_space=[{}]'.format(dvc_filesystem_space), debug=True)
-    dvc_filesystem_percent = lineParts[4].replace('%', '')
-    print_line('dvc_filesystem_percent=[{}]'.format(dvc_filesystem_percent), debug=True)
+    lines = stdout.decode('utf-8').split("\n")
+    trimmedLines = []
+    for currLine in lines:
+        trimmedLine = currLine.lstrip().rstrip()
+        if len(trimmedLine) > 0:
+            trimmedLines.append(trimmedLine)
+
+    print_line('getFileSystemDrives() trimmedLines=[{}]'.format(trimmedLines), debug=True)
+
+    #  EXAMPLES 
+    #  /dev/root          59998   9290     48208  17% /
+    #  /dev/sda1         937872 177420    712743  20% /media/data
+    # or
+    #  /dev/root          59647  3328     53847   6% /
+    #  /dev/sda1           3703    25      3472   1% /media/pi/SANDISK
+    # or
+    #  xxx.xxx.xxx.xxx:/srv/c2db7b94 200561 148655 41651 79% /
+
+    # FAILING Case v1.4.0:
+    # Here is the output of 'df -m'
+
+    # Sys. de fichiers blocs de 1M Utilisé Disponible Uti% Monté sur
+    # /dev/root 119774 41519 73358 37% /
+    # devtmpfs 1570 0 1570 0% /dev
+    # tmpfs 1699 0 1699 0% /dev/shm
+    # tmpfs 1699 33 1667 2% /run
+    # tmpfs 5 1 5 1% /run/lock
+    # tmpfs 1699 0 1699 0% /sys/fs/cgroup
+    # /dev/mmcblk0p1 253 55 198 22% /boot
+    # tmpfs 340 0 340 0% /run/user/1000
+
+    tmpDrives = []
+    for currLine in trimmedLines:
+        lineParts = currLine.split()
+        print_line('lineParts({})=[{}]'.format(len(lineParts), lineParts), debug=True)
+        if len(lineParts) < 6:
+            print_line('BAD LINE FORMAT, Skipped=[{}]'.format(lineParts), debug=True, warning=True)
+            continue
+        # tuple { total blocks, used%, mountPoint, device }
+        total_size_in_gb = '{:.0f}'.format(next_power_of_2(lineParts[1]))
+        newTuple = ( total_size_in_gb, lineParts[4].replace('%',''), lineParts[5],  lineParts[0] )
+        tmpDrives.append(newTuple)
+        print_line('newTuple=[{}]'.format(newTuple), debug=True)
+        if newTuple[2] == '/':
+            dvc_filesystem_space_raw = currLine
+            dvc_filesystem_space = newTuple[0]
+            dvc_filesystem_percent = newTuple[1]
+            print_line('dvc_filesystem_space=[{}GB]'.format(newTuple[0]), debug=True)
+            print_line('dvc_filesystem_percent=[{}]'.format(newTuple[1]), debug=True)
+
+    dvc_filesystem = tmpDrives
+    print_line('dvc_filesystem=[{}]'.format(dvc_filesystem), debug=True)
+
+def next_power_of_2(size):  
+    size_as_nbr = int(size) - 1
+    return 1 if size == 0 else (1<<size_as_nbr.bit_length()) / 1024
 
 def getSystemTemperature():
     global dvc_system_temp
-    dvc_system_temp = ''    # NOT avial on Omega2
+    dvc_system_temp = 'n/a'    # NOT avial on Omega2
 
 def getLastUpdateDate():    # RERUN in loop
     global dvc_last_update_date
@@ -446,6 +484,8 @@ aliveTimerRunningStatus = False
 # -----------------------------------------------------------------------------
 
 # MQTT connection
+if sensor_name == default_sensor_name:
+    sensor_name = 'dvc-{}'.format(dvc_hostname.lower())
 lwt_topic = '{}/sensor/{}/status'.format(base_topic, sensor_name.lower())
 lwt_online_val = 'online'
 lwt_offline_val = 'offline'
@@ -547,10 +587,10 @@ for [sensor, params] in detectorValues.items():
     if 'device_ident' in params:
         payload['dev'] = {
                 'identifiers' : ["{}".format(uniqID)],
-                'manufacturer' : 'Raspberry Pi (Trading) Ltd.',
+                'manufacturer' : 'Onion Corporation',
                 'name' : params['device_ident'],
                 'model' : '{}'.format(dvc_model),
-                'sw_version': "{} {}".format(dvc_linux_release, dvc_linux_version)
+                'sw_version': "v{}".format(dvc_firmware_version)
         }
     else:
          payload['dev'] = {
@@ -704,7 +744,7 @@ def publishMonitorData(latestData, topic):
 def update_values():
     # nothing here yet
     getUptime()
-    getFileSystemSpace()
+    getFileSystemDrives()
     getSystemTemperature()
     getLastUpdateDate()
 
