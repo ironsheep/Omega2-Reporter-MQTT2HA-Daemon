@@ -7,14 +7,16 @@
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 
 
-A simple Linux python script to query the Omega2 on which it is running for various configuration and status values which it then reports via via [MQTT](https://projects.eclipse.org/projects/iot.mosquitto) to your [Home Assistant](https://www.home-assistant.io/) installation.  This allows you to install and run this on each of your Omega2's so you can track them all via your own Home Assistant Dashboard.
+A simple python script to query the Omega2 on which it is running for various configuration and status values which it then reports via via [MQTT](https://projects.eclipse.org/projects/iot.mosquitto) to your [Home Assistant](https://www.home-assistant.io/) installation.  
+
+This allows you to install and run this on each of your Omega2's so you can track them all via your own Home Assistant Dashboard by using the Lovelace custom card built originally for reporting on Raspberry Pi's but which can also display the status of your Omega2 devices!
+*(Jump to below [Lovelace Custom Card](#lovelace-custom-card).)*
+
 
 ![Discovery image](./DOCs/images/DiscoveryV1.png)
 
-This script should be configured to be run in **daemon mode** continously in the background as a System-V init script. (using instructions/scripts provided)
+This script should be configured to be run in **daemon mode** continously in the background as a System-V init script. (using instructions/script provided)
 
-This script feeds the Lovelace custom card built originally for reporting on Raspberry Pi's but which can also display the status of your Omega2 devices!
-*(Jump to below [Lovelace Custom Card](#lovelace-custom-card).)*
 
 ## Features
 
