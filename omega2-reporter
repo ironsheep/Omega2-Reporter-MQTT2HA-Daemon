@@ -1,67 +1,69 @@
-#!/bin/sh
-### BEGIN INIT INFO
-# Provides:          omega2-reporter
-# Required-Start:    $network $local_fs 
-# Required-Stop:     $network $local_fs  
-# Default-Start:     2 3 4 5
-# Default-Stop:      0 1 6
-# Short-Description: Init script Omega2 Reporter
-# Description:       Init script for starting ISP-Omega2-mqtt-daemon
-#                    https://github.com/ironsheep/Omega2-Reporter-MQTT2HA-Daemon
-### END INIT INFO
+#!/bin/sh /etc/rc.common
 
-# Using the lsb functions to perform the operations.
-. /lib/lsb/init-functions
-# Process name ( For display )
-NAME=omega2-reporter
+# fm Example: Copyright (C) 2006-2012 OpenWrt.org
+# NOTE: the shebang line loads support script parts for us
+
+START=30
+STOP=15
+
+USE_PROCD=1
+
+
 # Daemon name, where is the actual executable
-DIR=/opt/Omega2-Reporter-MQTT2HA-Daemon
-DAEMON=$DIR/ISP-Omega2-mqtt-daemon.py
+DAEMON_DIR=/opt/Omega2-Reporter-MQTT2HA-Daemon
+DAEMON=$DAEMON_DIR/ISP-Omega2-mqtt-daemon.py
+
+# Process name ( For display )
 DAEMON_NAME=omega2-reporter
 
 # Add any command line options for your daemon here
-DAEMON_OPTS='--config '$DIR
+DAEMON_OPTS='--config '$DAEMON_DIR
+
+DAEMON_CONFIG_FILE=${DAEMON_DIR}/config.ini
 
 # This next line determines what user the script runs as.
 # Root generally not recommended but necessary if you are using the Raspberry Pi GPIO from Python.
-DAEMON_USER=daemon
+DAEMON_USER=nobody
 
 # The process ID of the script when it runs is stored here:
-PIDFILE=/var/run/$DAEMON_NAME.pid
+DAEMON_PID_FILE=/var/run/${DAEMON_NAME}.pid
 
-. /lib/lsb/init-functions
+EXTRA_COMMANDS="status"
+EXTRA_HELP="	status  Display run status of $DAEMON_NAME
+"
 
-do_start () {
-    log_daemon_msg "Starting system $DAEMON_NAME daemon"
-    start-stop-daemon --start --background --pidfile $PIDFILE --make-pidfile --user $DAEMON_USER --chuid $DAEMON_USER --startas $DAEMON -- $DAEMON_OPTS
-    log_end_msg $?
+ 
+status () {
+        # do the stuff for status
+        RUN_STATE=`ps | grep ISP | egrep -v grep`
+        echo ""
+        if [ -n "$RUN_STATE" ]; then
+            echo "$DAEMON_NAME: Running"
+        else
+            echo "$DAEMON_NAME: NOT Running"
+        fi
+        echo ""
 }
-do_stop () {
-    log_daemon_msg "Stopping system $DAEMON_NAME daemon"
-    start-stop-daemon --stop --pidfile $PIDFILE --retry 10
-    log_end_msg $?
+
+start_service() {
+  procd_open_instance [$DAEMON_NAME]
+  procd_set_param command /usr/bin/python3 $DAEMON $DAEMON_OPTS
+  #procd_append_param command -bar 42 # append command parameters
+
+  # respawn automatically if something died, be careful if you have an alternative process supervisor
+  # if process dies sooner than respawn_threshold, it is considered crashed and after 5 retries the service is stopped
+  procd_set_param respawn ${respawn_threshold:-3600} ${respawn_timeout:-5} ${respawn_retry:-5}
+
+  #procd_set_param env SOME_VARIABLE=funtimes  # pass environment variables to your process
+  #procd_set_param limits core="unlimited"  # If you need to set ulimit for your process
+  procd_set_param file $DAEMON_CONFIG_FILE  # /etc/init.d/your_service reload will restart the daemon if these files have changed
+  #procd_set_param netdev dev # likewise, except if dev's ifindex changes.
+  #procd_set_param data name=value ... # likewise, except if this data changes.
+  procd_set_param stdout 1 # forward stdout of the command to logd
+  procd_set_param stderr 1 # same for stderr
+  procd_set_param user $DAEMON_USER # run service as user nobody
+  procd_set_param pidfile $DAEMON_PID_FILE # write a pid file on instance start and remove it on stop
+  procd_close_instance
 }
 
-case "$1" in
-
-    start|stop)
-        do_${1}
-        ;;
-
-    restart|reload|force-reload)
-        do_stop
-        do_start
-        ;;
-
-    status)
-	status_of_proc "$DAEMON_NAME" "$DAEMON_NAME" && exit 0 || exit $?
-        ;;
-
-    *)
-        echo "Usage: /etc/init.d/$DAEMON_NAME {start|stop|restart|status}"
-        exit 1
-        ;;
-
-esac
-exit 0
 

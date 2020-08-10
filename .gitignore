@@ -9,6 +9,12 @@ __pycache__/
 # no finder stuff
 .DS_Store
 
+# ignore local test stuff
+README-orig.md
+SOURCES/
+genBugInfo-*.lst
+init.d/
+
 # no customized config
 config.ini
 

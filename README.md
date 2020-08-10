@@ -41,9 +41,10 @@ Each Omega device is reported as:
 
 Each Omega device is reported as a single topic:
 
-| Name            | Device Class |  Description
-|-----------------|-------------|-------------|-------------|
-| `~/monitor`   | 'timestamp' |  Is a timestamp which shows when the Omega last sent information, carries a template payload conveying all monitored values (attach the lovelace custom card to this sensor!)
+| Name            | Device Class | Unit |   Description
+|-----------------|-------------|-------------|-------------|-------------|
+| `~/monitor`   | 'timestamp' | date/time | Is a timestamp which shows when the Omega last sent information, carries a template payload conveying all monitored values (attach the lovelace custom card to this sensor!)
+| `~/disk_used `   | n/a | percent (%)| Percent of space used on root drive
 
 
 ### Omega Monitor Topic
@@ -170,13 +171,13 @@ Set up the script to be run as a Sys V init script as follows:
    ln -s /opt/Omega2-Reporter-MQTT2HA-Daemon/omega2-reporter /etc/init.d/omega2-reporter
 
 	# configure system to start this script at boot time
-   update-rc.d omega2-reporter defaults
+   /etc/init.d/omega2-reporter enable
 
    # let's start the script now, too so we don't have to reboot
    /etc/init.d/omega2-reporter start
   
    # check to make sure all is ok with the start up
-   /etc/init.d/omega2-reporter status
+   /etc/init.d/omega2-reporter status  # look for "Running" vs. "NOT Running"
    ```
 
    
@@ -201,7 +202,7 @@ Now You can update to the latest by following these steps:
 
    ```shell
    # stop the service
-   sudo /etc/init.d/omega2-reporter stop
+  /etc/init.d/omega2-reporter stop
    
    # move to installed options directory
    cd /opt
@@ -218,10 +219,10 @@ Now You can update to the latest by following these steps:
    # (this makes sure our new files arrived in desired location)
 
    # restart the service with your new version
-   sudo /etc/init.d/omega2-reporter start
+   /etc/init.d/omega2-reporter start
 
    # check status of the running script
-   sudo /etc/init.d/omega2-reporter status
+   /etc/init.d/omega2-reporter status  # look for "Running" vs. "NOT Running"
    
    # if the status looks good then remove the older isntall directory
    rm -rf /opt/Omega2-Reporter-MQTT2HA-Daemon-old

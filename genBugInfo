@@ -231,7 +231,7 @@ endCommand
 # ----------------------------------------------------------------------
 # get OS name - version
 #
-OS_NAME="openwrt"
+OS_NAME="OpenWrt"
 showCommand "echo ${OS_NAME}"
 if [ ${VERBOSE_LEVEL} -gt 0 -a -z "${WITHOUT_DOING}" ]; then
 echo "${OS_NAME}"
@@ -320,6 +320,26 @@ if [ ${VERBOSE_LEVEL} -gt 0 -a -z "${WITHOUT_DOING}" ]; then
 /sbin/route
 else 
 /sbin/route >>${OUTFILE} 2>&1
+fi
+endCommand
+
+# ----------------------------------------------------------------------
+
+showCommand "/bin/df -m"
+if [ ${VERBOSE_LEVEL} -gt 0 -a -z "${WITHOUT_DOING}" ]; then
+/bin/df -m
+else 
+/bin/df -m >>${OUTFILE} 2>&1
+fi
+endCommand
+
+# ----------------------------------------------------------------------
+
+showCommand "/bin/df -m | /usr/bin/tail -n +2 | /bin/egrep -v 'tmpfs|/rom'"
+if [ ${VERBOSE_LEVEL} -gt 0 -a -z "${WITHOUT_DOING}" ]; then
+/bin/df -m | /usr/bin/tail -n +2 | /bin/egrep -v 'tmpfs|/rom'
+else 
+/bin/df -m | /usr/bin/tail -n +2 | /bin/egrep -v 'tmpfs|/rom' >>${OUTFILE} 2>&1
 fi
 endCommand
 
