@@ -93,14 +93,28 @@ if opt_debug:
 if opt_stall:
     print_line('TEST: Stall (no-re-reporting) enabled', debug=True)
 
+# -----------------------------------------------------------------------------
+#  MQTT handlers
+# -----------------------------------------------------------------------------
+
 # Eclipse Paho callbacks - http://www.eclipse.org/paho/clients/python/docs/#callbacks
+mqtt_client_connected = False
+print_line('* init mqtt_client_connected=[{}]'.format(mqtt_client_connected), debug=True)
+mqtt_client_should_attempt_reconnect = True
+
 def on_connect(client, userdata, flags, rc):
+    global mqtt_client_connected
     if rc == 0:
         print_line('* MQTT connection established', console=True, sd_notify=True)
         print_line('')  # blank line?!
         #_thread.start_new_thread(afterMQTTConnect, ())
+        mqtt_client_connected = True
+        print_line('on_connect() mqtt_client_connected=[{}]'.format(mqtt_client_connected), debug=True)
     else:
         print_line('! Connection error with result code {} - {}'.format(str(rc), mqtt.connack_string(rc)), error=True)
+        print_line('MQTT Connection error with result code {} - {}'.format(str(rc), mqtt.connack_string(rc)), error=True, sd_notify=True)
+        mqtt_client_connected = False   # technically NOT useful but readying possible new shape...
+        print_line('on_connect() mqtt_client_connected=[{}]'.format(mqtt_client_connected), debug=True, error=True)
         #kill main thread
         os._exit(1)
 
@@ -255,7 +269,7 @@ def getUptime():    # RERUN in loop
     #print_line('lineParts=[{}]'.format(lineParts), debug=True)
     dvc_uptime_raw = lineParts[0]
     print_line('dvc_uptime_raw=[{}]'.format(dvc_uptime_raw), debug=True)
-    dvc_uptime = dvc_uptime_raw.replace(timeStamp, '').lstrip().replace('up ', '')
+    dvc_uptime = dvc_uptime_raw.replace(timeStamp, '').lstrip().replace('up ', '').lstrip()
     print_line('dvc_uptime=[{}]'.format(dvc_uptime), debug=True)
 
 def getNetworkIFs():    # RERUN in loop
@@ -524,7 +538,11 @@ except:
 else:
     mqtt_client.publish(lwt_topic, payload=lwt_online_val, retain=False)
     mqtt_client.loop_start()
-    sleep(1.0) # some slack to establish the connection
+
+    while mqtt_client_connected == False: #wait in loop
+        print_line('* Wait on mqtt_client_connected=[{}]'.format(mqtt_client_connected), debug=True)
+        sleep(1.0) # some slack to establish the connection
+
     startAliveTimer()
 
 
@@ -546,8 +564,8 @@ LDS_PAYLOAD_NAME = "info"
 # Publish our MQTT auto discovery
 #  table of key items to publish:
 detectorValues = OrderedDict([
-    (LD_MONITOR, dict(title="IoT Monitor {}".format(dvc_hostname), device_class="timestamp", no_title_prefix="yes", json_value="timestamp", json_attr="yes", icon='mdi:raspberry-pi', device_ident="IoT-{}".format(dvc_fqdn))),
-    (LD_FS_USED, dict(title="IoT Used {}".format(dvc_hostname), no_title_prefix="yes", json_value="fs_free_prcnt", unit="%", icon='mdi:sd')),
+    (LD_MONITOR, dict(title="Monitor {}".format(dvc_hostname), device_class="timestamp", no_title_prefix="yes", json_value="timestamp", json_attr="yes", icon='mdi:raspberry-pi', device_ident="IoT-{}".format(dvc_fqdn))),
+    (LD_FS_USED, dict(title="Used {}".format(dvc_hostname), no_title_prefix="yes", json_value="fs_free_prcnt", unit="%", icon='mdi:sd')),
 ])
 
 print_line('Announcing IoT Monitoring device to MQTT broker for auto-discovery ...')
@@ -644,7 +662,7 @@ reported_first_time = False
 #  MQTT Transmit Helper Routines
 # -----------------------------------------------------------------------------
 SCRIPT_TIMESTAMP = "timestamp"
-DVC_MODEL = "dvc_model"
+DVC_MODEL = "rpi_model"
 DVC_CONNECTIONS = "ifaces"
 DVC_HOSTNAME = "host_name"
 DVC_FQDN = "fqdn"
