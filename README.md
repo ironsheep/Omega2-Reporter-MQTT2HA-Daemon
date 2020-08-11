@@ -108,7 +108,7 @@ tar -xzvf /root/{filename}.tar.gz
 cd /opt/Omega2-Reporter-MQTT2HA-Daemon
 
 # and install our extra python support
-sudo pip3 install -r requirements.txt
+pip3 install -r requirements.txt
 ```
 
 ## Configuration

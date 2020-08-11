@@ -186,6 +186,7 @@ dvc_linux_version = ''
 dvc_uptime_raw = ''
 dvc_uptime = ''
 dvc_last_update_date = datetime.min
+dvc_last_fw_check_date = datetime.min
 dvc_filesystem_space_raw = ''
 dvc_filesystem_space = ''
 dvc_filesystem_percent = ''
@@ -408,14 +409,24 @@ def getSystemTemperature():
 
 def getLastUpdateDate():    # RERUN in loop
     global dvc_last_update_date
-    apt_log_filespec = '/var/opkg-lists/omega2_base.sig'
+    global dvc_last_fw_check_date
+    opkg_log_filespec = '/var/opkg-lists/omega2_base.sig'
     try:
-        mtime = os.path.getmtime(apt_log_filespec)
+        mtime = os.path.getmtime(opkg_log_filespec)
     except OSError:
         mtime = 0
     last_modified_date = datetime.fromtimestamp(mtime, tz=local_tz)
     dvc_last_update_date  = last_modified_date
     print_line('dvc_last_update_date=[{}]'.format(dvc_last_update_date), debug=True)
+
+    oupgrade_log_filespec = '/var/oupgrade.log'
+    try:
+        mtime = os.path.getmtime(oupgrade_log_filespec)
+    except OSError:
+        mtime = 0
+    last_modified_date = datetime.fromtimestamp(mtime, tz=local_tz)
+    dvc_last_fw_check_date  = last_modified_date
+    print_line('dvc_last_fw_check_date=[{}]'.format(dvc_last_fw_check_date), debug=True)
 
 def getFirmwareVersion():
     global dvc_firmware_version
