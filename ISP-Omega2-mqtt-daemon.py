@@ -24,7 +24,7 @@ import paho.mqtt.client as mqtt
 from signal import signal, SIGPIPE, SIG_DFL
 signal(SIGPIPE,SIG_DFL)
 
-script_version = "1.0.0"
+script_version = "1.1.0"
 script_name = 'ISP-Omega2-mqtt-daemon.py'
 script_info = '{} v{}'.format(script_name, script_version)
 project_name = 'Omega2 Reporter MQTT2HA Daemon'
@@ -72,7 +72,7 @@ def clean_identifier(name):
     clean = unidecode(clean)
     return clean
 
-# Argparse            
+# Argparse
 parser = argparse.ArgumentParser(description=project_name, epilog='For further details see: ' + project_url)
 parser.add_argument("-v", "--verbose", help="increase output verbosity", action="store_true")
 parser.add_argument("-d", "--debug", help="show debug output", action="store_true")
@@ -153,7 +153,7 @@ default_sensor_name = 'dvc-reporter'
 base_topic = config['MQTT'].get('base_topic', default_base_topic).lower()
 sensor_name = config['MQTT'].get('sensor_name', default_sensor_name).lower()
 
-# report our IoT values every 5min 
+# report our IoT values every 5min
 min_interval_in_minutes = 2
 max_interval_in_minutes = 30
 default_interval_in_minutes = 5
@@ -163,7 +163,7 @@ interval_in_minutes = config['Daemon'].getint('interval_in_minutes', default_int
 #
 if (interval_in_minutes < min_interval_in_minutes) or (interval_in_minutes > max_interval_in_minutes):
     print_line('ERROR: Invalid "interval_in_minutes" found in configuration file: "config.ini"! Must be [{}-{}] Fix and try again... Aborting'.format(min_interval_in_minutes, max_interval_in_minutes), error=True, sd_notify=True)
-    sys.exit(1)    
+    sys.exit(1)
 
 ### Ensure required values within sections of our config are present
 if not config['MQTT']:
@@ -173,7 +173,7 @@ if not config['MQTT']:
 print_line('Configuration accepted', console=False, sd_notify=True)
 
 # -----------------------------------------------------------------------------
-#  IoT variables monitored 
+#  IoT variables monitored
 # -----------------------------------------------------------------------------
 
 dvc_model_raw = ''
@@ -195,22 +195,94 @@ dvc_mqtt_script = script_info
 dvc_mac_raw = ''
 dvc_interfaces = []
 dvc_filesystem = []
+# Tuple (Total, Free, Avail.)
+dvc_memory_tuple = ''
+# Tuple (Hardware, Model Name, NbrCores, BogoMIPS)
+dvc_cpu_tuple = ''
 
 # -----------------------------------------------------------------------------
 #  monitor variable fetch routines
 #
+def getDeviceCpuInfo():
+    global dvc_cpu_tuple
+    #  cat /proc/meminfo | egrep -i 'mem[tfa]'
+    #  system type             : MediaTek MT7688 ver:1 eco:2
+    #  machine                 : Onion Omega2+
+    #  cpu model               : MIPS 24KEc V5.5
+    #  BogoMIPS                : 385.84
+    out = subprocess.Popen("cat /proc/cpuinfo | egrep -i 'system|cpu|bogo'",
+           shell=True,
+           stdout=subprocess.PIPE,
+           stderr=subprocess.STDOUT)
+    stdout, _ = out.communicate()
+    lines = stdout.decode('utf-8').split("\n")
+    trimmedLines = []
+    for currLine in lines:
+        trimmedLine = currLine.lstrip().rstrip()
+        trimmedLines.append(trimmedLine)
+    cpu_hardware = ''
+    cpu_cores = 1
+    cpu_model = ''
+    cpu_bogoMIPS = ''
+    for currLine in trimmedLines:
+        lineParts = currLine.split(':')
+        if 'system' in currLine:
+            cpu_hardware = currLine.replace('system type','').replace(': ','').lstrip().rstrip()
+        if 'cpu' in currLine:
+            cpu_model = lineParts[1].lstrip().rstrip()
+        if 'Bogo' in currLine:
+            cpu_bogoMIPS = float(lineParts[1])
+    # Tuple (Hardware, Model Name, NbrCores, BogoMIPS)
+    dvc_cpu_tuple = ( cpu_hardware, cpu_model, cpu_cores, cpu_bogoMIPS )
+    print_line('dvc_cpu_tuple=[{}]'.format(dvc_cpu_tuple), debug=True)
+
+def getDeviceMemory():
+    global dvc_memory_tuple
+    #  cat /proc/meminfo | egrep -i 'mem[tfa]'
+    #  MemTotal:         124808 kB
+    #  MemFree:           45264 kB
+    #  MemAvailable:      41640 kB
+    out = subprocess.Popen("cat /proc/meminfo | egrep -i 'mem[tfa]'",
+           shell=True,
+           stdout=subprocess.PIPE,
+           stderr=subprocess.STDOUT)
+    stdout, _ = out.communicate()
+    lines = stdout.decode('utf-8').split("\n")
+    trimmedLines = []
+    for currLine in lines:
+        trimmedLine = currLine.lstrip().rstrip()
+        trimmedLines.append(trimmedLine)
+    mem_total = ''
+    mem_free = ''
+    mem_avail = ''
+    for currLine in trimmedLines:
+        lineParts = currLine.split()
+        if 'MemTotal' in currLine:
+            mem_total = float(lineParts[1]) / 1024
+        if 'MemFree' in currLine:
+            mem_free = float(lineParts[1]) / 1024
+        if 'MemAvail' in currLine:
+            mem_avail = float(lineParts[1]) / 1024
+    # Tuple (Total, Free, Avail.)
+    dvc_memory_tuple = ( mem_total, mem_free, mem_avail )
+    print_line('dvc_memory_tuple=[{}]'.format(dvc_memory_tuple), debug=True)
+
 def getDeviceModel():
     global dvc_model
     global dvc_model_raw
     global dvc_connections
-    out = subprocess.Popen("/bin/grep sysfs /etc/config/system | /usr/bin/awk '{ print $3 }' | /usr/bin/cut -f1 -d:", 
+    out = subprocess.Popen("cat /proc/cpuinfo | grep machine",
            shell=True,
-           stdout=subprocess.PIPE, 
+           stdout=subprocess.PIPE,
            stderr=subprocess.STDOUT)
-    stdout,_ = out.communicate()
-    dvc_model_raw = stdout.decode('utf-8').replace("'",'').rstrip()
+    stdout, _ = out.communicate()
+    dvc_model_raw = stdout.decode('utf-8').lstrip().rstrip()
     # now reduce string length (just more compact, same info)
-    dvc_model = dvc_model_raw.replace('p', '+')
+    lineParts = dvc_model_raw.split(':')
+    if len(lineParts) > 1:
+        dvc_model = lineParts[1].lstrip().rstrip()
+    else:
+        dvc_model = ''
 
     # now decode interfaces
     dvc_connections = 'w' # default
@@ -226,23 +298,23 @@ def getLinuxRelease():
 
 def getLinuxVersion():
     global dvc_linux_version
-    out = subprocess.Popen("/bin/uname -r", 
+    out = subprocess.Popen("/bin/uname -r",
            shell=True,
-           stdout=subprocess.PIPE, 
+           stdout=subprocess.PIPE,
            stderr=subprocess.STDOUT)
-    stdout,_ = out.communicate()
+    stdout, _ = out.communicate()
     dvc_linux_version = stdout.decode('utf-8').rstrip()
     print_line('dvc_linux_version=[{}]'.format(dvc_linux_version), debug=True)
-    
+
 def getHostnames():
     global dvc_hostname
     global dvc_fqdn
     #  BUG?! our Omega2 doesn't know our domain name so we append it
-    out = subprocess.Popen("/bin/cat /etc/config/system | /bin/grep host | /usr/bin/awk '{ print $3 }'", 
+    out = subprocess.Popen("/bin/cat /etc/config/system | /bin/grep host | /usr/bin/awk '{ print $3 }'",
            shell=True,
-           stdout=subprocess.PIPE, 
+           stdout=subprocess.PIPE,
            stderr=subprocess.STDOUT)
-    stdout,_ = out.communicate()
+    stdout, _ = out.communicate()
     dvc_hostname = stdout.decode('utf-8').rstrip().replace("'", '')
     print_line('dvc_hostname=[{}]'.format(dvc_hostname), debug=True)
     if len(fallback_domain) > 0:
@@ -254,11 +326,11 @@ def getHostnames():
 def getUptime():    # RERUN in loop
     global dvc_uptime_raw
     global dvc_uptime
-    out = subprocess.Popen("/usr/bin/uptime", 
+    out = subprocess.Popen("/usr/bin/uptime",
            shell=True,
-           stdout=subprocess.PIPE, 
+           stdout=subprocess.PIPE,
            stderr=subprocess.STDOUT)
-    stdout,_ = out.communicate()
+    stdout, _ = out.communicate()
     dvc_uptime_raw = stdout.decode('utf-8').rstrip().lstrip()
     print_line('dvc_uptime_raw=[{}]'.format(dvc_uptime_raw), debug=True)
     basicParts = dvc_uptime_raw.split()
@@ -276,11 +348,11 @@ def getUptime():    # RERUN in loop
 def getNetworkIFs():    # RERUN in loop
     global dvc_interfaces
     global dvc_mac_raw
-    out = subprocess.Popen('/sbin/ifconfig | egrep "Link|flags|inet|ether" | egrep -v -i "lo:|loopback|inet6|\:\:1|127\.0\.0\.1"', 
+    out = subprocess.Popen('/sbin/ifconfig | egrep "Link|flags|inet|ether" | egrep -v -i "lo:|loopback|inet6|\:\:1|127\.0\.0\.1"',
            shell=True,
-           stdout=subprocess.PIPE, 
+           stdout=subprocess.PIPE,
            stderr=subprocess.STDOUT)
-    stdout,_ = out.communicate()
+    stdout, _ = out.communicate()
     lines = stdout.decode('utf-8').split("\n")
     trimmedLines = []
     for currLine in lines:
@@ -290,9 +362,9 @@ def getNetworkIFs():    # RERUN in loop
     #print_line('trimmedLines=[{}]'.format(trimmedLines), debug=True)
     #
     # OLDER SYSTEMS
-    #  eth0      Link encap:Ethernet  HWaddr b8:27:eb:c8:81:f2  
+    #  eth0      Link encap:Ethernet  HWaddr b8:27:eb:c8:81:f2
     #    inet addr:192.168.100.41  Bcast:192.168.100.255  Mask:255.255.255.0
-    #  wlan0     Link encap:Ethernet  HWaddr 00:0f:60:03:e6:dd  
+    #  wlan0     Link encap:Ethernet  HWaddr 00:0f:60:03:e6:dd
     # NEWER SYSTEMS
     #  The following means eth0 (wired is NOT connected, and WiFi is connected)
     #  eth0: flags=4099<UP,BROADCAST,MULTICAST>  mtu 1500
@@ -341,11 +413,11 @@ def getFileSystemDrives():
     global dvc_filesystem_space
     global dvc_filesystem_percent
     global dvc_filesystem
-    out = subprocess.Popen("/bin/df -m | /usr/bin/tail -n +2 | /bin/egrep -v 'tmpfs|boot'", 
+    out = subprocess.Popen("/bin/df -m | /usr/bin/tail -n +2 | /bin/egrep -v 'tmpfs|boot|mmcblk|mtdblock|/rom'",
             shell=True,
-            stdout=subprocess.PIPE, 
+            stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT)
-    stdout,_ = out.communicate()
+    stdout, _ = out.communicate()
     lines = stdout.decode('utf-8').split("\n")
     trimmedLines = []
     for currLine in lines:
@@ -355,7 +427,7 @@ def getFileSystemDrives():
 
     print_line('getFileSystemDrives() trimmedLines=[{}]'.format(trimmedLines), debug=True)
 
-    #  EXAMPLES 
+    #  EXAMPLES
     #  /dev/root          59998   9290     48208  17% /
     #  /dev/sda1         937872 177420    712743  20% /media/data
     # or
@@ -399,7 +471,7 @@ def getFileSystemDrives():
     dvc_filesystem = tmpDrives
     print_line('dvc_filesystem=[{}]'.format(dvc_filesystem), debug=True)
 
-def next_power_of_2(size):  
+def next_power_of_2(size):
     size_as_nbr = int(size) - 1
     return 1 if size == 0 else (1<<size_as_nbr.bit_length()) / 1024
 
@@ -430,23 +502,23 @@ def getLastUpdateDate():    # RERUN in loop
 
 def getFirmwareVersion():
     global dvc_firmware_version
-    out = subprocess.Popen("/usr/bin/oupgrade -v | tr -d '>'", 
+    out = subprocess.Popen("/usr/bin/oupgrade -v | tr -d '>'",
            shell=True,
-           stdout=subprocess.PIPE, 
+           stdout=subprocess.PIPE,
            stderr=subprocess.STDOUT)
-    stdout,_ = out.communicate()
+    stdout, _ = out.communicate()
     fw_version_raw = stdout.decode('utf-8').rstrip()
     lineParts = fw_version_raw.split(':')
     dvc_firmware_version = lineParts[1].lstrip()
     print_line('dvc_firmware_version=[{}]'.format(dvc_firmware_version), debug=True)
-    
+
 def getProcessorType():
     global dvc_processor_family
-    out = subprocess.Popen("/bin/uname -m", 
+    out = subprocess.Popen("/bin/uname -m",
            shell=True,
-           stdout=subprocess.PIPE, 
+           stdout=subprocess.PIPE,
            stderr=subprocess.STDOUT)
-    stdout,_ = out.communicate()
+    stdout, _ = out.communicate()
     dvc_processor_family = stdout.decode('utf-8').rstrip()
     print_line('dvc_processor_family=[{}]'.format(dvc_processor_family), debug=True)
 
@@ -456,11 +528,14 @@ getDeviceModel()
 getFirmwareVersion()
 # get our hostnames so we can setup MQTT
 getHostnames()
+getDeviceCpuInfo()
+getProcessorType()
 getLastUpdateDate()
 getLinuxRelease()
 getLinuxVersion()
 getNetworkIFs()
-getProcessorType()
+
+
 
 # -----------------------------------------------------------------------------
 #  timer and timer funcs for ALIVE MQTT Notices handling
@@ -481,7 +556,7 @@ def startAliveTimer():
     global aliveTimer
     global aliveTimerRunningStatus
     stopAliveTimer()
-    aliveTimer = threading.Timer(ALIVE_TIMOUT_IN_SECONDS, aliveTimeoutHandler) 
+    aliveTimer = threading.Timer(ALIVE_TIMOUT_IN_SECONDS, aliveTimeoutHandler)
     aliveTimer.start()
     aliveTimerRunningStatus = True
     print_line('- started MQTT timer - every {} seconds'.format(ALIVE_TIMOUT_IN_SECONDS), debug=True)
@@ -498,7 +573,7 @@ def isAliveTimerRunning():
     return aliveTimerRunningStatus
 
 # our ALIVE TIMER
-aliveTimer = threading.Timer(ALIVE_TIMOUT_IN_SECONDS, aliveTimeoutHandler) 
+aliveTimer = threading.Timer(ALIVE_TIMOUT_IN_SECONDS, aliveTimeoutHandler)
 # our BOOL tracking state of ALIVE TIMER
 aliveTimerRunningStatus = False
 
@@ -583,7 +658,7 @@ print_line('Announcing IoT Monitoring device to MQTT broker for auto-discovery .
 
 base_topic = '{}/sensor/{}'.format(base_topic, sensor_name.lower())
 values_topic_rel = '{}/{}'.format('~', LD_MONITOR)
-values_topic = '{}/{}'.format(base_topic, LD_MONITOR) 
+values_topic = '{}/{}'.format(base_topic, LD_MONITOR)
 activity_topic_rel = '{}/status'.format('~')     # vs. LWT
 activity_topic = '{}/status'.format(base_topic)    # vs. LWT
 
@@ -645,7 +720,7 @@ def startPeriodTimer():
     global endPeriodTimer
     global periodTimeRunningStatus
     stopPeriodTimer()
-    endPeriodTimer = threading.Timer(interval_in_minutes * 60.0, periodTimeoutHandler) 
+    endPeriodTimer = threading.Timer(interval_in_minutes * 60.0, periodTimeoutHandler)
     endPeriodTimer.start()
     periodTimeRunningStatus = True
     print_line('- started PERIOD timer - every {} seconds'.format(interval_in_minutes * 60.0), debug=True)
@@ -664,7 +739,7 @@ def isPeriodTimerRunning():
 
 
 # our TIMER
-endPeriodTimer = threading.Timer(interval_in_minutes * 60.0, periodTimeoutHandler) 
+endPeriodTimer = threading.Timer(interval_in_minutes * 60.0, periodTimeoutHandler)
 # our BOOL tracking state of TIMER
 periodTimeRunningStatus = False
 reported_first_time = False
@@ -677,8 +752,8 @@ DVC_MODEL = "rpi_model"
 DVC_CONNECTIONS = "ifaces"
 DVC_HOSTNAME = "host_name"
 DVC_FQDN = "fqdn"
-DVC_LINUX_RELEASE = "ux_release" 
-DVC_LINUX_VERSION = "ux_version" 
+DVC_LINUX_RELEASE = "ux_release"
+DVC_LINUX_VERSION = "ux_version"
 DVC_UPTIME = "up_time"
 DVC_DATE_LAST_UPDATE = "last_update"
 DVC_FS_SPACE = 'fs_total_gb' # "fs_space_gbytes"
@@ -688,21 +763,28 @@ DVC_SCRIPT = "reporter"
 DVC_NETWORK = "networking"
 DVC_INTERFACE = "interface"
 SCRIPT_REPORT_INTERVAL = "report_interval"
+# new drives dictionary
+DVC_DRIVES = "drives"
+DVC_DRV_BLOCKS = "size_gb"
+DVC_DRV_USED = "used_prcnt"
+DVC_DRV_MOUNT = "mount_pt"
+DVC_DRV_DEVICE = "device"
+DVC_DRV_NFS = "device-nfs"
+DVC_DVC_IP = "ip"
+DVC_DVC_PATH = "dvc"
+# new memory dictionary
+DVC_MEMORY = "memory"
+DVC_MEM_TOTAL = "size_mb"
+DVC_MEM_FREE = "free_mb"
+# Tuple (Hardware, Model Name, NbrCores, BogoMIPS)
+DVC_CPU = "cpu"
+DVC_CPU_HARDWARE = "hardware"
+DVC_CPU_MODEL = "model_name"
+DVC_CPU_CORES = "number_cores"
+DVC_CPU_BOGOMIPS = "bogo_mips"
+
 
 def send_status(timestamp, nothing):
-    global dvc_model
-    global dvc_connections
-    global dvc_hostname
-    global dvc_fqdn
-    global dvc_linux_release
-    global dvc_linux_version
-    global dvc_uptime
-    global dvc_last_update_date
-    global dvc_filesystem_space
-    global dvc_filesystem_percent
-    global dvc_system_temp
-    global dvc_mqtt_script
-
     dvcData = OrderedDict()
     dvcData[SCRIPT_TIMESTAMP] = timestamp.astimezone().replace(microsecond=0).isoformat()
     dvcData[DVC_MODEL] = dvc_model
@@ -726,6 +808,18 @@ def send_status(timestamp, nothing):
 
     dvcData[DVC_NETWORK] = getNetworkDictionary()
 
+    dvcDrives = getDrivesDictionary()
+    if len(dvcDrives) > 0:
+        dvcData[DVC_DRIVES] = dvcDrives
+
+    dvcRam = getMemoryDictionary()
+    if len(dvcRam) > 0:
+        dvcData[DVC_MEMORY] = dvcRam
+
+    dvcCpu = getCPUDictionary()
+    if len(dvcCpu) > 0:
+        dvcData[DVC_CPU] = dvcCpu
+
     dvcData[DVC_TEMP] = dvc_system_temp
     dvcData[DVC_SCRIPT] = dvc_mqtt_script.replace('.py', '')
     dvcData[SCRIPT_REPORT_INTERVAL] = interval_in_minutes
@@ -735,12 +829,39 @@ def send_status(timestamp, nothing):
 
     _thread.start_new_thread(publishMonitorData, (dvcTopDict, values_topic))
 
+def getDrivesDictionary():
+    dvcDrives = OrderedDict()
+    # tuple { total blocks, used%, mountPoint, device }
+    for driveTuple in dvc_filesystem:
+        dvcSingleDrive = OrderedDict()
+        dvcSingleDrive[DVC_DRV_BLOCKS] = int(driveTuple[0])
+        dvcSingleDrive[DVC_DRV_USED] = int(driveTuple[1])
+        device = driveTuple[3]
+        # special 'overlayfs' for omega2+ devices
+        if ':' in device and 'overlayfs' not in device:
+            dvcDevice = OrderedDict()
+            lineParts = device.split(':')
+            dvcDevice[DVC_DVC_IP] = lineParts[0]
+            dvcDevice[DVC_DVC_PATH] = lineParts[1]
+            dvcSingleDrive[DVC_DRV_NFS] = dvcDevice
+        else:
+            dvcSingleDrive[DVC_DRV_DEVICE] = device
+            #rpiTest = OrderedDict()
+            #rpiTest[DVC_DVC_IP] = '255.255.255.255'
+            #rpiTest[DVC_DVC_PATH] = '/srv/c2db7b94'
+            #dvcSingleDrive[DVC_DRV_NFS] = rpiTest
+        dvcSingleDrive[DVC_DRV_MOUNT] = driveTuple[2]
+        driveKey = driveTuple[2].replace('/','-').replace('-','',1)
+        if len(driveKey) == 0:
+            driveKey = "root"
+        dvcDrives[driveKey] = dvcSingleDrive
+    return dvcDrives;
+
 def getNetworkDictionary():
-    global dvc_interfaces
     # TYPICAL:
     # dvc_interfaces=[[
-    #   ('eth0', 'mac', 'b8:27:eb:1a:f3:bc'), 
-    #   ('wlan0', 'IP', '192.168.100.189'), 
+    #   ('eth0', 'mac', 'b8:27:eb:1a:f3:bc'),
+    #   ('wlan0', 'IP', '192.168.100.189'),
     #   ('wlan0', 'mac', 'b8:27:eb:4f:a6:e9')
     # ]]
     networkData = OrderedDict()
@@ -761,23 +882,47 @@ def getNetworkDictionary():
         subValue = currTuple[2]
         tmpData[subKey] = subValue
     networkData[priorIFKey] = tmpData
-    print_line('networkData:{}"'.format(networkData), debug=True)
+    #print_line('networkData:{}"'.format(networkData), debug=True)
     return networkData
+
+def getMemoryDictionary():
+    # TYPICAL:
+    #   Tuple (Total, Free, Avail.)
+    memoryData = OrderedDict()
+    if dvc_memory_tuple != '':
+        memoryData[DVC_MEM_TOTAL] = '{:.3f}'.format(dvc_memory_tuple[0])
+        memoryData[DVC_MEM_FREE] = '{:.3f}'.format(dvc_memory_tuple[2])
+    #print_line('memoryData:{}"'.format(memoryData), debug=True)
+    return memoryData
+
+def getCPUDictionary():
+    # TYPICAL:
+    #   Tuple (Hardware, Model Name, NbrCores, BogoMIPS)
+    cpuDict = OrderedDict()
+    #print_line('dvc_cpu_tuple:{}"'.format(dvc_cpu_tuple), debug=True)
+    if dvc_cpu_tuple != '':
+        cpuDict[DVC_CPU_HARDWARE] = dvc_cpu_tuple[0]
+        cpuDict[DVC_CPU_MODEL] = dvc_cpu_tuple[1]
+        cpuDict[DVC_CPU_CORES] = dvc_cpu_tuple[2]
+        cpuDict[DVC_CPU_BOGOMIPS] = '{:.2f}'.format(dvc_cpu_tuple[3])
+    #print_line('cpuDict:{}"'.format(cpuDict), debug=True)
+    return cpuDict
 
 def publishMonitorData(latestData, topic):
     print_line('Publishing to MQTT topic "{}, Data:{}"'.format(topic, json.dumps(latestData)))
     mqtt_client.publish('{}'.format(topic), json.dumps(latestData), 1, retain=False)
-    sleep(0.5) # some slack for the publish roundtrip and callback function  
+    sleep(0.5) # some slack for the publish roundtrip and callback function
 
 
 def update_values():
     # nothing here yet
     getUptime()
+    getDeviceMemory()
     getFileSystemDrives()
     getSystemTemperature()
     getLastUpdateDate()
 
-    
+
 
 # -----------------------------------------------------------------------------
 
@@ -797,7 +942,7 @@ def handle_interrupt(channel):
         reported_first_time = True
     else:
         print_line(sourceID + " >> Time to report! (%s) but SKIPPED (TEST: stall)" % current_timestamp.strftime('%H:%M:%S - %Y/%m/%d'), verbose=True)
-    
+
 def afterMQTTConnect():
     print_line('* afterMQTTConnect()', verbose=True)
     #  NOTE: this is run after MQTT connects
@@ -821,7 +966,7 @@ try:
     while True:
         #  our INTERVAL timer does the work
         sleep(10000)
-        
+
 finally:
     # cleanup used pins... just because we like cleaning up after us
     stopPeriodTimer()   # don't leave our timers running!

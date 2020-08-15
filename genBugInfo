@@ -343,6 +343,25 @@ else
 fi
 endCommand
 
+
+
+# ----------------------------------------------------------------------
+
+#   New:
+#    root@Omega-289E:~# cat /proc/cpuinfo | egrep "system|machine|model"
+#      system type             : MediaTek MT7688 ver:1 eco:2
+#      machine                 : Onion Omega2+
+#      cpu model               : MIPS 24KEc V5.5
+#
+#    root@Omega-289E:~# cat /proc/meminfo | egrep -i "mem[TFA]"
+#      MemTotal:         124808 kB
+#      MemFree:           47716 kB
+#      MemAvailable:      43440 kB
+#
+#    root@Omega-289E:~# uptime
+#      15:06:34 up 29 min,  load average: 0.00, 0.00, 0.00
+#
+
 # ----------------------------------------------------------------------
 
 if [ -f ${OUTFILE} ]; then

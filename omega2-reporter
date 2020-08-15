@@ -32,10 +32,10 @@ EXTRA_COMMANDS="status"
 EXTRA_HELP="	status  Display run status of $DAEMON_NAME
 "
 
- 
+
 status () {
         # do the stuff for status
-        RUN_STATE=`ps | grep ISP | egrep -v grep`
+        RUN_STATE=`ps | grep "Reporter-M" | egrep -v grep`
         echo ""
         if [ -n "$RUN_STATE" ]; then
             echo "$DAEMON_NAME: Running"
