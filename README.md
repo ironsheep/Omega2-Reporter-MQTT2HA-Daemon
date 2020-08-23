@@ -44,7 +44,7 @@ Each Omega device is reported as:
 Each Omega device is reported as a single topic:
 
 | Name            | Device Class | Unit |   Description
-|-----------------|-------------|-------------|-------------|-------------|
+|-----------------|-------------|-------------|-------------|
 | `~/monitor`   | 'timestamp' | date/time | Is a timestamp which shows when the Omega last sent information, carries a template payload conveying all monitored values (attach the lovelace custom card to this sensor!)
 | `~/disk_used `   | n/a | percent (%)| Percent of space used on root drive
 
