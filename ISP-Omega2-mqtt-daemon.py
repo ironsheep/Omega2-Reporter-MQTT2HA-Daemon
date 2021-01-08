@@ -55,6 +55,8 @@ def print_line(text, error=False, warning=False, info=False, verbose=False, debu
         elif info or verbose:
             if opt_verbose:
                 print(Fore.GREEN + '[{}] '.format(timestamp) + Fore.YELLOW  + '- ' + '{}'.format(text) + Style.RESET_ALL)
+            else:
+                print(Fore.YELLOW + '[{}] '.format(timestamp) + Fore.YELLOW  + '- ' + '{}'.format(text) + Style.RESET_ALL)
         elif log:
             if opt_debug:
                 print(Fore.MAGENTA + '[{}] '.format(timestamp) + '- (DBG): ' + '{}'.format(text) + Style.RESET_ALL)
